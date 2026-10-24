@@ -1,0 +1,120 @@
+======================================================================
+                  CCTV DASHBOARD - COMPLETE USER GUIDE
+======================================================================
+
+Welcome! This system runs natively on your Windows computer. It gives
+you a live video dashboard for your CP Plus / RTSP cameras and uses
+lightweight local AI (YOLO) to detect people, vehicles, and pets.
+
+No Docker or Linux is needed. Everything is self-contained.
+
+
+1. HOW TO START AND STOP
+----------------------------------------------------------------------
+- TO START EVERYTHING (Dashboard + Camera Streamer + AI Detection):
+    Double-click: start-all.bat
+    Three small windows will open minimized. Your browser will
+    automatically open: http://localhost:3000
+
+- TO START IN LIGHTWEIGHT MODE (Dashboard + Streamer only, No AI):
+    Double-click: start-dashboard-only.bat
+    Uses minimal RAM and CPU. Ideal for older laptops or background viewing.
+
+- TO STOP EVERYTHING:
+    Double-click: stop-all.bat
+    This cleanly closes all background programs and frees the ports.
+
+
+2. SIGNING IN FOR THE FIRST TIME
+----------------------------------------------------------------------
+- Open: http://localhost:3000
+- Default Username: admin
+- Temporary Password: AdminSecret123!
+  (See Section 6 below to change this to your own personal password!)
+
+
+3. HOW TO ADD YOUR CP PLUS DVR CAMERAS
+----------------------------------------------------------------------
+You can add your cameras using the friendly "Add Camera" helper:
+
+A) Adding a single camera:
+   1. Click "+ Add Single Camera".
+   2. Select Brand: "CP Plus / Dahua".
+   3. Enter your DVR IP Address (e.g. 192.168.1.100).
+   4. RTSP Port: leave as 554.
+   5. Type your DVR camera username and password.
+   6. Enter Channel (e.g. 1 for Camera 1).
+   7. Keep "Light stream" checked (recommended for low memory).
+   8. Click "Test Connection". If green, click "Save Camera"!
+
+B) Adding multiple channels at once (e.g. Channels 1 to 4):
+   1. Click "+ Add Channels (1 to 4)".
+   2. Enter your DVR IP, username, and password.
+   3. Set From Channel: 1, To Channel: 4.
+   4. Click "Add All Channels". All 4 will appear on your grid!
+
+
+4. WHAT TO DO IF A CAMERA SCREEN IS BLACK
+----------------------------------------------------------------------
+- Check 1: IP address. Open Command Prompt and type:
+    ping 192.168.1.100
+  (replace with your DVR's actual IP). If it says "Request timed out",
+  check if the DVR is powered on and connected to your Wi-Fi/router.
+
+- Check 2: DVR Username/Password. In some CP Plus DVRs, RTSP requires
+  a DVR user with "Live View" permissions. Try creating a separate user
+  (e.g., "viewer") in your DVR menu.
+
+- Check 3: Light stream vs Main stream. Edit the camera in the dashboard
+  and toggle the "Light stream" checkbox.
+
+
+5. WHERE FILES AND RECORDINGS ARE SAVED
+----------------------------------------------------------------------
+- data/cameras.json : List of your added cameras.
+- data/events.json  : List of recorded AI events (auto-capped at 500).
+- data/events/      : Snapshot JPEG pictures from AI detections.
+- logs/             : Log files for troubleshooting (auto-capped at 5MB).
+- .env              : Your passwords and alert tokens.
+
+
+6. HOW TO CHANGE YOUR DASHBOARD PASSWORD
+----------------------------------------------------------------------
+1. Double-click stop-all.bat to stop the system.
+2. Right-click the ".env" file in this folder and choose "Open with Notepad".
+3. Find the line:
+     ADMIN_PASS=AdminSecret123!
+4. Change it to your own chosen password (at least 8 characters).
+5. Save the file (Ctrl+S) and close Notepad.
+6. Double-click start-all.bat.
+
+
+7. HOW TO BACK UP YOUR SYSTEM
+----------------------------------------------------------------------
+To back up your configuration and cameras:
+- Simply copy the "data" folder and your ".env" file to a USB drive or
+  safe folder.
+- If you ever reinstall Windows, putting those two back restores all your
+  cameras and settings instantly.
+
+
+8. OPTIONAL: RUN AUTOMATICALLY ON WINDOWS STARTUP (TASK SCHEDULER)
+----------------------------------------------------------------------
+If you want the dashboard to start whenever you sign in to Windows:
+1. Press Windows Key + R, type: taskschd.msc and press Enter.
+2. Click "Create Basic Task..." on the right.
+3. Name it: "CCTV Dashboard".
+4. Trigger: Choose "When I log on".
+5. Action: Choose "Start a program".
+6. Program/script: Click Browse and select "start-all.bat".
+7. "Start in (optional)": Enter the full path of this folder:
+   C:\Users\ikkur\Desktop\cc cam software
+8. Click Finish.
+
+
+9. HOW TO RUN SELF-TEST
+----------------------------------------------------------------------
+Double-click: check.bat
+It will test that all ports, login, camera adding, and AI snapshot
+storage are functioning with 100% PASS marks.
+======================================================================

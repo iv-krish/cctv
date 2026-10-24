@@ -1,0 +1,14 @@
+{
+  "name": "cctv-dashboard",
+  "version": "1.0.0",
+  "description": "Native Windows CCTV Dashboard with go2rtc and YOLO AI detection",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "test": "node --env-file=.env check.js"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "express-session": "^1.19.0"
+  }
+}

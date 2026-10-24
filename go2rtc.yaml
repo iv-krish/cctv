@@ -1,0 +1,16 @@
+# go2rtc configuration
+# All internal services listen on 127.0.0.1 only for local security
+
+api:
+  listen: "127.0.0.1:1984"
+
+rtsp:
+  listen: "127.0.0.1:8554"
+
+webrtc:
+  listen: "127.0.0.1:8555"
+
+log:
+  level: "info"
+
+streams: {}

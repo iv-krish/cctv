@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCTV Dashboard - Home Security</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    
+    /* Header */
+    header { background: #0b1120; border-bottom: 1px solid var(--card-border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo-area { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; font-weight: 700; color: #fff; }
+    .status-dot { width: 10px; height: 10px; background: var(--success); border-radius: 50%; display: inline-block; box-shadow: 0 0 8px var(--success); }
+    .nav-tabs { display: flex; gap: 8px; }
+    .tab-btn { background: transparent; border: 1px solid transparent; color: var(--text-muted); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; font-weight: 500; transition: all 0.2s; }
+    .tab-btn.active, .tab-btn:hover { background: var(--card-bg); color: #fff; border-color: var(--card-border); }
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+    
+    /* Buttons */
+    .btn { background: var(--accent); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transition: background 0.2s; }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-secondary { background: #334155; }
+    .btn-secondary:hover { background: #475569; }
+    .btn-success { background: var(--success); }
+    .btn-success:hover { background: #059669; }
+    .btn-danger { background: var(--danger); }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+    
+    /* Container & Views */
+    main { padding: 24px; flex: 1; max-width: 1400px; margin: 0 auto; width: 100%; }
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+    
+    /* Camera Grid */
+    .grid-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .camera-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 20px; }
+    @media (max-width: 600px) { .camera-grid { grid-template-columns: 1fr; } }
+    
+    .cam-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+    .cam-header { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; background: #162032; border-bottom: 1px solid var(--card-border); }
+    .cam-title { font-weight: 600; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+    .cam-badge { font-size: 0.75rem; background: #0f172a; padding: 2px 8px; border-radius: 4px; color: var(--text-muted); border: 1px solid var(--card-border); }
+    .cam-viewport { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; }
+    .cam-viewport iframe { width: 100%; height: 100%; border: none; }
+    .cam-footer { padding: 10px 16px; font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); background: #182234; }
+    
+    /* AI Events Panel */
+    .events-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .events-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .event-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+    .event-thumb { aspect-ratio: 16/9; background: #000; width: 100%; object-fit: cover; cursor: pointer; border-bottom: 1px solid var(--card-border); }
+    .event-body { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .event-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; background: #2563eb; color: #fff; width: fit-content; }
+    .event-meta { font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+    
+    /* Settings Form */
+    .settings-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 24px; max-width: 800px; margin: 0 auto; }
+    .settings-card h3 { margin-bottom: 16px; font-size: 1.1rem; color: #fff; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; }
+    .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #2d3748; font-size: 0.95rem; }
+    .info-label { color: var(--text-muted); }
+    
+    /* Modals */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; width: 100%; max-width: 540px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); overflow: hidden; }
+    .modal-header { padding: 16px 20px; background: #162032; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h3 { font-size: 1.1rem; color: #fff; }
+    .modal-close { background: transparent; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; line-height: 1; }
+    .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: 75vh; overflow-y: auto; }
+    .modal-footer { padding: 14px 20px; background: #162032; border-top: 1px solid var(--card-border); display: flex; justify-content: flex-end; gap: 10px; }
+    
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.85rem; font-weight: 500; color: #cbd5e1; }
+    .form-group input, .form-group select { background: #0f172a; border: 1px solid var(--card-border); color: #fff; padding: 10px 12px; border-radius: 6px; font-size: 0.95rem; }
+    .form-group input:focus, .form-group select:focus { border-color: var(--accent); outline: none; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; }
+    .checkbox-row input { width: 16px; height: 16px; }
+    
+    /* Helper message box */
+    .helper-box { padding: 10px 14px; border-radius: 6px; font-size: 0.85rem; line-height: 1.4; }
+    .helper-info { background: #1e3a8a; border: 1px solid #3b82f6; color: #bfdbfe; }
+    .helper-success { background: #064e3b; border: 1px solid var(--success); color: #a7f3d0; }
+    .helper-warning { background: #78350f; border: 1px solid var(--warning); color: #fde68a; }
+    .helper-danger { background: #7f1d1d; border: 1px solid var(--danger); color: #fecaca; }
+    
+    /* Login Screen */
+    #loginOverlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 200; }
+    .login-box { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; width: 100%; max-width: 380px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .login-logo { text-align: center; margin-bottom: 24px; }
+    .login-logo h2 { font-size: 1.5rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- Fullscreen Login Screen -->
+  <div id="loginOverlay" style="display: none;">
+    <div class="login-box">
+      <div class="login-logo">
+        <span style="font-size: 3rem;">📹</span>
+        <h2>CCTV Dashboard</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">Sign in to view your home cameras</p>
+      </div>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label>Username</label>
+          <input type="text" id="loginUser" value="admin" required autocomplete="username">
+        </div>
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label>Password</label>
+          <input type="password" id="loginPass" placeholder="Enter password" required autocomplete="current-password">
+        </div>
+        <div id="loginError" class="helper-box helper-danger" style="display: none; margin-bottom: 16px;"></div>
+        <button type="submit" class="btn btn-success" style="width: 100%; justify-content: center; padding: 10px;">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <span class="status-dot"></span>
+      <span>CCTV Dashboard</span>
+    </div>
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('cameras')">Live Cameras</button>
+      <button class="tab-btn" onclick="switchTab('events')">AI Events <span id="eventCountBadge" style="background: #2563eb; color: #fff; font-size: 0.75rem; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">0</span></button>
+      <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
+    </div>
+    <div class="header-actions">
+      <span id="currentUserLabel" style="font-size: 0.85rem; color: var(--text-muted);">admin</span>
+      <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. LIVE CAMERAS VIEW -->
+    <div id="view-cameras" class="view-panel active">
+      <div class="grid-toolbar">
+        <div>
+          <h2 style="font-size: 1.3rem;">Live Video Grid</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">Real-time video feed streamed via local go2rtc engine</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" onclick="openBulkModal()">+ Add Channels (1 to 4)</button>
+          <button class="btn btn-success" onclick="openAddModal()">+ Add Single Camera</button>
+        </div>
+      </div>
+      <div id="cameraGrid" class="camera-grid">
+        <!-- Rendered dynamically -->
+      </div>
+      <div id="emptyCameraNotice" style="display: none; text-align: center; padding: 60px 20px; background: var(--card-bg); border-radius: 10px; border: 1px dashed var(--card-border);">
+        <span style="font-size: 3rem;">📷</span>
+        <h3 style="margin-top: 12px;">No Cameras Added Yet</h3>
+        <p style="color: var(--text-muted); margin-top: 6px; margin-bottom: 20px;">Add your CP Plus DVR or IP cameras using the button below.</p>
+        <button class="btn btn-success" onclick="openAddModal()">Add Your First Camera</button>
+      </div>
+    </div>
+
+    <!-- 2. AI EVENTS VIEW -->
+    <div id="view-events" class="view-panel">
+      <div class="events-header">
+        <div>
+          <h2 style="font-size: 1.3rem;">AI Detection Events</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">Automated detections with YOLO (People, Vehicles, Animals)</p>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="clearAllEvents()">Clear All Events</button>
+      </div>
+      <div id="eventsGrid" class="events-grid">
+        <!-- Rendered dynamically -->
+      </div>
+      <div id="emptyEventsNotice" style="display: none; text-align: center; padding: 60px 20px; background: var(--card-bg); border-radius: 10px; border: 1px dashed var(--card-border);">
+        <span style="font-size: 3rem;">⚡</span>
+        <h3 style="margin-top: 12px;">No AI Events Recorded</h3>
+        <p style="color: var(--text-muted); margin-top: 6px;">When the AI detects people, cars, or movement, snapshot alerts will appear here in real-time.</p>
+      </div>
+    </div>
+
+    <!-- 3. SETTINGS VIEW -->
+    <div id="view-settings" class="view-panel">
+      <div class="settings-card">
+        <h3>System Status & Overview</h3>
+        <div class="info-row">
+          <span class="info-label">Dashboard Server</span>
+          <span>Running locally on <strong>127.0.0.1:3000</strong></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">go2rtc Media Engine</span>
+          <span>Running locally on <strong>127.0.0.1:1984</strong></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">AI Detector</span>
+          <span>YOLOv8 Nano (CPU Mode, every 2 sec, max 500 events)</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Network Exposure</span>
+          <span id="networkExposureLabel" style="color: var(--success);">Protected (Localhost only, no router ports opened)</span>
+        </div>
+
+        <h3 style="margin-top: 24px;">☁️ Cloudflare Tunnel (Remote Access)</h3>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+          Start a secure Cloudflare Tunnel to access your CCTV Dashboard from anywhere (phone, office, etc.) without opening router ports. A temporary public HTTPS URL is created.
+        </p>
+        <div id="tunnelControls" style="margin-bottom: 16px;">
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button id="btnTunnelStart" onclick="startTunnel()" style="padding: 8px 20px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem;">▶ Start Tunnel</button>
+            <button id="btnTunnelStop" onclick="stopTunnel()" style="padding: 8px 20px; background: var(--danger); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; display: none;">⏹ Stop Tunnel</button>
+            <span id="tunnelStatusBadge" style="padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; background: #334155; color: var(--text-muted);">● Stopped</span>
+          </div>
+          <div id="tunnelUrlBox" style="display: none; margin-top: 12px; padding: 12px 16px; background: #0f172a; border: 1px solid var(--accent); border-radius: 8px;">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Your public URL (share this):</span><br>
+            <a id="tunnelUrlLink" href="#" target="_blank" style="font-size: 1.05rem; color: var(--accent); word-break: break-all;"></a>
+            <button onclick="copyTunnelUrl()" style="margin-left: 10px; padding: 4px 10px; font-size: 0.75rem; background: var(--card-border); color: #fff; border: none; border-radius: 4px; cursor: pointer;">📋 Copy</button>
+          </div>
+        </div>
+
+        <h3 style="margin-top: 24px;">Quick Documentation</h3>
+        <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px;">
+          All documentation files are located in your dashboard folder:
+        </p>
+        <ul style="margin-left: 20px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.8;">
+          <li><strong>HOW_TO_USE.txt</strong>: Complete beginner guide for starting, stopping, and backing up.</li>
+          <li><strong>WHATSAPP_SETUP.md</strong>: Step-by-step instructions to connect free WhatsApp alerts.</li>
+          <li><strong>EMAIL_SETUP.md</strong>: Setup instructions for Gmail / SMTP email notifications.</li>
+          <li><strong>.env</strong>: Configuration file where your passwords and alert tokens are safely stored.</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <!-- ADD CAMERA MODAL (Beginner Friendly Helper) -->
+  <div id="addCameraModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add Camera Helper</h3>
+        <button class="modal-close" onclick="closeAddModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Camera Brand</label>
+          <select id="camBrand" onchange="updateRtspPreview()">
+            <option value="cpplus" selected>CP Plus / Dahua (Recommended for DVR)</option>
+            <option value="hikvision">Hikvision (DVR / NVR)</option>
+            <option value="generic">Generic RTSP Camera</option>
+            <option value="advanced">Advanced (Paste custom full URL)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Camera Friendly Name</label>
+          <input type="text" id="camName" placeholder="e.g. Front Gate, Living Room" value="Front Gate">
+        </div>
+
+        <div id="standardFields">
+          <div class="form-row">
+            <div class="form-group">
+              <label>DVR / Camera IP Address</label>
+              <input type="text" id="camIp" placeholder="e.g. 192.168.1.100" oninput="updateRtspPreview()">
+              <small style="color: #94a3b8; font-size: 0.75rem; margin-top: 2px;">Local LAN IP (e.g. 192.168.1.100). Do not use P2P serial number.</small>
+            </div>
+            <div class="form-group">
+              <label>RTSP Port</label>
+              <input type="number" id="camPort" value="554" oninput="updateRtspPreview()">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Username</label>
+              <input type="text" id="camUser" placeholder="admin" value="admin" oninput="updateRtspPreview()">
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input type="password" id="camPass" placeholder="DVR camera password" oninput="updateRtspPreview()">
+            </div>
+          </div>
+
+          <div class="form-row" style="align-items: center; margin-top: 4px;">
+            <div class="form-group">
+              <label>Channel Number</label>
+              <input type="number" id="camChannel" value="1" min="1" max="32" oninput="updateRtspPreview()">
+            </div>
+            <label class="checkbox-row" style="margin-top: 18px;">
+              <input type="checkbox" id="camSubtype" checked onchange="updateRtspPreview()">
+              <span>Light stream (recommended for low RAM)</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="advancedFields" class="form-group" style="display: none;">
+          <label>Full RTSP Stream URL</label>
+          <input type="text" id="camCustomUrl" placeholder="rtsp://user:pass@192.168.1.100:554/..." oninput="updateRtspPreview()">
+        </div>
+
+        <!-- Live RTSP preview (Masked) -->
+        <div class="form-group">
+          <label style="color: var(--text-muted); font-size: 0.75rem;">Generated Stream URL (Password is masked):</label>
+          <div id="rtspPreview" style="font-family: monospace; font-size: 0.8rem; background: #0b1120; padding: 8px; border-radius: 4px; color: #93c5fd; word-break: break-all;">
+            rtsp://admin:••••••••@192.168.1.100:554/cam/realmonitor?channel=1&subtype=1
+          </div>
+        </div>
+
+        <!-- Connection Test Result Badge -->
+        <div id="testResultBox" style="display: none;" class="helper-box"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btnTestConn" onclick="testConnection()">Test Connection</button>
+        <button type="button" class="btn btn-success" onclick="saveCamera()">Save Camera</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BULK ADD CHANNELS MODAL -->
+  <div id="bulkModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add Multiple Channels at Once</h3>
+        <button class="modal-close" onclick="closeBulkModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Conveniently add all channels from your CP Plus DVR in one click.</p>
+        <div class="form-group">
+          <label>Brand</label>
+          <select id="bulkBrand">
+            <option value="cpplus" selected>CP Plus / Dahua DVR</option>
+            <option value="hikvision">Hikvision DVR / NVR</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>DVR IP Address</label>
+            <input type="text" id="bulkIp" placeholder="192.168.1.100">
+            <small style="color: #94a3b8; font-size: 0.75rem; margin-top: 2px;">Local LAN IP (e.g. 192.168.1.100). Do not use P2P serial number.</small>
+          </div>
+          <div class="form-group">
+            <label>RTSP Port</label>
+            <input type="number" id="bulkPort" value="554">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="bulkUser" value="admin">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="bulkPass" placeholder="DVR Password">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>From Channel</label>
+            <input type="number" id="bulkStart" value="1" min="1" max="32">
+          </div>
+          <div class="form-group">
+            <label>To Channel</label>
+            <input type="number" id="bulkEnd" value="4" min="1" max="32">
+          </div>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="bulkSubtype" checked>
+          <span>Light stream (recommended for smooth 4-camera grid)</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeBulkModal()">Cancel</button>
+        <button type="button" class="btn btn-success" onclick="saveBulkCameras()">Add All Channels</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SNAPSHOT PREVIEW MODAL -->
+  <div id="imageModal" class="modal-overlay" onclick="closeImageModal()">
+    <div style="max-width: 90vw; max-height: 90vh;">
+      <img id="modalImg" src="" style="width: 100%; height: auto; max-height: 85vh; border-radius: 8px; border: 2px solid var(--card-border);">
+    </div>
+  </div>
+
+  <script>
+    let currentCameras = [];
+    let currentEvents = [];
+
+    // App Initialization
+    async function initApp() {
+      const auth = await checkAuth();
+      if (auth.authenticated) {
+        document.getElementById('loginOverlay').style.display = 'none';
+        document.getElementById('currentUserLabel').textContent = auth.user;
+        loadCameras();
+        loadEvents();
+        connectEventStream();
+        pollTunnelStatus();
+      } else {
+        document.getElementById('loginOverlay').style.display = 'flex';
+      }
+    }
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth-status');
+        return await res.json();
+      } catch (e) {
+        return { authenticated: false };
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const user = document.getElementById('loginUser').value;
+      const pass = document.getElementById('loginPass').value;
+      const errBox = document.getElementById('loginError');
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user, password: pass })
+        });
+        const data = await res.json();
+        if (data.success) {
+          errBox.style.display = 'none';
+          initApp();
+        } else {
+          errBox.textContent = data.error || 'Invalid credentials';
+          errBox.style.display = 'block';
+        }
+      } catch (err) {
+        errBox.textContent = 'Server connection error';
+        errBox.style.display = 'block';
+      }
+    }
+
+    async function handleLogout() {
+      await fetch('/api/logout', { method: 'POST' });
+      location.reload();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById(`view-${tab}`).classList.add('active');
+    }
+
+    // Camera Management
+    async function loadCameras() {
+      try {
+        const res = await fetch('/api/cameras');
+        currentCameras = await res.json();
+        renderCameras();
+      } catch (e) {
+        console.error('Failed to load cameras:', e);
+      }
+    }
+
+    function renderCameras() {
+      const grid = document.getElementById('cameraGrid');
+      const empty = document.getElementById('emptyCameraNotice');
+      grid.innerHTML = '';
+
+      if (currentCameras.length === 0) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      currentCameras.forEach(cam => {
+        const card = document.createElement('div');
+        card.className = 'cam-card';
+        // go2rtc stream URL (proxied through /go2rtc for local & remote Cloudflare access)
+        const streamUrl = `/go2rtc/stream.html?src=${encodeURIComponent(cam.id)}&mode=webrtc,mse,mp4`;
+        
+        card.innerHTML = `
+          <div class="cam-header">
+            <div class="cam-title">
+              <span class="status-dot"></span>
+              <span>${escapeHtml(cam.name)}</span>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="cam-badge">Ch ${cam.channel}</span>
+              <button class="btn btn-danger btn-sm" onclick="deleteCamera('${cam.id}')">Delete</button>
+            </div>
+          </div>
+          <div class="cam-viewport">
+            <iframe src="${streamUrl}" allow="autoplay; fullscreen" loading="lazy"></iframe>
+          </div>
+          <div class="cam-footer">
+            <span style="font-family: monospace;">${escapeHtml(cam.maskedUrl || '')}</span>
+            <span>${cam.subtype ? 'Light stream' : 'Main stream'}</span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    async function deleteCamera(id) {
+      if (!confirm('Are you sure you want to remove this camera?')) return;
+      await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
+      loadCameras();
+    }
+
+    // Modal Helpers
+    function openAddModal() {
+      document.getElementById('addCameraModal').classList.add('active');
+      document.getElementById('testResultBox').style.display = 'none';
+      updateRtspPreview();
+    }
+    function closeAddModal() {
+      document.getElementById('addCameraModal').classList.remove('active');
+    }
+    function openBulkModal() {
+      document.getElementById('bulkModal').classList.add('active');
+    }
+    function closeBulkModal() {
+      document.getElementById('bulkModal').classList.remove('active');
+    }
+
+    function updateRtspPreview() {
+      const brand = document.getElementById('camBrand').value;
+      const isAdvanced = brand === 'advanced';
+      document.getElementById('standardFields').style.display = isAdvanced ? 'none' : 'block';
+      document.getElementById('advancedFields').style.display = isAdvanced ? 'block' : 'none';
+
+      if (isAdvanced) {
+        const custom = document.getElementById('camCustomUrl').value || 'rtsp://...';
+        document.getElementById('rtspPreview').textContent = custom.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:••••••••@');
+        return;
+      }
+
+      const ip = document.getElementById('camIp').value || '192.168.1.100';
+      const port = document.getElementById('camPort').value || '554';
+      const user = document.getElementById('camUser').value || 'admin';
+      const ch = document.getElementById('camChannel').value || '1';
+      const sub = document.getElementById('camSubtype').checked ? 1 : 0;
+
+      let path = '';
+      if (brand === 'cpplus' || brand === 'dahua') {
+        path = `/cam/realmonitor?channel=${ch}&subtype=${sub}`;
+      } else if (brand === 'hikvision') {
+        path = `/Streaming/Channels/${ch}0${sub + 1}`;
+      } else {
+        path = `/live/ch${ch}`;
+      }
+
+      document.getElementById('rtspPreview').textContent = `rtsp://${encodeURIComponent(user)}:••••••••@${ip}:${port}${path}`;
+    }
+
+    async function testConnection() {
+      const btn = document.getElementById('btnTestConn');
+      const box = document.getElementById('testResultBox');
+      btn.disabled = true;
+      btn.textContent = 'Testing connection...';
+      box.style.display = 'none';
+
+      const payload = {
+        brand: document.getElementById('camBrand').value,
+        ip: document.getElementById('camIp').value,
+        port: document.getElementById('camPort').value,
+        username: document.getElementById('camUser').value,
+        password: document.getElementById('camPass').value,
+        channel: document.getElementById('camChannel').value,
+        subtype: document.getElementById('camSubtype').checked,
+        customUrl: document.getElementById('camCustomUrl').value
+      };
+
+      try {
+        const res = await fetch('/api/cameras/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        box.style.display = 'block';
+        if (result.status === 'ok') {
+          box.className = 'helper-box helper-success';
+          box.innerHTML = `<strong>✓ ${result.message}</strong><br>${result.suggestion}`;
+        } else {
+          box.className = 'helper-box helper-danger';
+          box.innerHTML = `<strong>✕ ${result.message}</strong><br><em>Tip:</em> ${result.suggestion}`;
+        }
+      } catch (err) {
+        box.style.display = 'block';
+        box.className = 'helper-box helper-danger';
+        box.innerHTML = `<strong>✕ Test failed:</strong> Could not connect to dashboard server.`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+      }
+    }
+
+    async function saveCamera() {
+      const name = document.getElementById('camName').value;
+      if (!name) return alert('Please give this camera a name');
+
+      const payload = {
+        name,
+        brand: document.getElementById('camBrand').value,
+        ip: document.getElementById('camIp').value,
+        port: document.getElementById('camPort').value,
+        username: document.getElementById('camUser').value,
+        password: document.getElementById('camPass').value,
+        channel: document.getElementById('camChannel').value,
+        subtype: document.getElementById('camSubtype').checked,
+        customUrl: document.getElementById('camCustomUrl').value
+      };
+
+      const res = await fetch('/api/cameras', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        closeAddModal();
+        loadCameras();
+      } else {
+        alert(data.error || 'Failed to save camera');
+      }
+    }
+
+    async function saveBulkCameras() {
+      const payload = {
+        namePrefix: 'Camera',
+        brand: document.getElementById('bulkBrand').value,
+        ip: document.getElementById('bulkIp').value,
+        port: document.getElementById('bulkPort').value,
+        username: document.getElementById('bulkUser').value,
+        password: document.getElementById('bulkPass').value,
+        startChannel: document.getElementById('bulkStart').value,
+        endChannel: document.getElementById('bulkEnd').value,
+        subtype: document.getElementById('bulkSubtype').checked
+      };
+
+      const res = await fetch('/api/cameras/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        closeBulkModal();
+        loadCameras();
+      } else {
+        alert(data.error || 'Failed to add cameras');
+      }
+    }
+
+    // AI Events
+    async function loadEvents() {
+      try {
+        const res = await fetch('/api/events');
+        currentEvents = await res.json();
+        renderEvents();
+      } catch (e) {}
+    }
+
+    function renderEvents() {
+      const grid = document.getElementById('eventsGrid');
+      const empty = document.getElementById('emptyEventsNotice');
+      const badge = document.getElementById('eventCountBadge');
+      badge.textContent = currentEvents.length;
+      grid.innerHTML = '';
+
+      if (currentEvents.length === 0) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      currentEvents.forEach(ev => {
+        const card = document.createElement('div');
+        card.className = 'event-card';
+        const imgHtml = ev.snapshot 
+          ? `<img src="${ev.snapshot}" class="event-thumb" onclick="showImage('${ev.snapshot}')" alt="Snapshot" loading="lazy">`
+          : `<div class="event-thumb" style="display:flex;align-items:center;justify-content:center;color:#64748b;">No Image</div>`;
+
+        card.innerHTML = `
+          ${imgHtml}
+          <div class="event-body">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="event-tag">${getEmoji(ev.label)} ${escapeHtml(ev.label)}</span>
+              <span style="font-size: 0.8rem; font-weight:600; color: #38bdf8;">${ev.confidence}%</span>
+            </div>
+            <div class="event-meta">
+              <span>📹 ${escapeHtml(ev.cameraName)}</span>
+              <span>${new Date(ev.timestamp).toLocaleTimeString()}</span>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function getEmoji(label) {
+      const l = (label || '').toLowerCase();
+      if (l.includes('person')) return '🚶';
+      if (l.includes('car') || l.includes('truck') || l.includes('bus')) return '🚗';
+      if (l.includes('motorcycle') || l.includes('bicycle')) return '🏍️';
+      if (l.includes('dog') || l.includes('cat') || l.includes('animal')) return '🐕';
+      return '⚡';
+    }
+
+    function showImage(src) {
+      document.getElementById('modalImg').src = src;
+      document.getElementById('imageModal').classList.add('active');
+    }
+    function closeImageModal() {
+      document.getElementById('imageModal').classList.remove('active');
+    }
+
+    async function clearAllEvents() {
+      if (!confirm('Clear all recorded AI events?')) return;
+      await fetch('/api/events', { method: 'DELETE' });
+      currentEvents = [];
+      renderEvents();
+    }
+
+    function connectEventStream() {
+      const es = new EventSource('/api/events/stream');
+      es.onmessage = (e) => {
+        try {
+          const ev = JSON.parse(e.data);
+          currentEvents.unshift(ev);
+          if (currentEvents.length > 500) currentEvents.pop();
+          renderEvents();
+        } catch (err) {}
+      };
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+
+    // Cloudflare Tunnel Controls
+    let tunnelPollTimer = null;
+
+    async function startTunnel() {
+      const btn = document.getElementById('btnTunnelStart');
+      btn.disabled = true;
+      btn.textContent = '⏳ Starting...';
+      try {
+        await fetch('/api/tunnel/start', { method: 'POST' });
+        // Start polling for URL
+        if (!tunnelPollTimer) {
+          tunnelPollTimer = setInterval(updateTunnelUI, 2000);
+        }
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '▶ Start Tunnel';
+      }
+    }
+
+    async function stopTunnel() {
+      try {
+        await fetch('/api/tunnel/stop', { method: 'POST' });
+      } catch (e) {}
+      updateTunnelUI();
+    }
+
+    async function updateTunnelUI() {
+      try {
+        const res = await fetch('/api/tunnel/status');
+        const data = await res.json();
+        const badge = document.getElementById('tunnelStatusBadge');
+        const btnStart = document.getElementById('btnTunnelStart');
+        const btnStop = document.getElementById('btnTunnelStop');
+        const urlBox = document.getElementById('tunnelUrlBox');
+        const urlLink = document.getElementById('tunnelUrlLink');
+        const netLabel = document.getElementById('networkExposureLabel');
+
+        if (!data.available) {
+          badge.textContent = '● Not Installed';
+          badge.style.background = '#334155';
+          badge.style.color = 'var(--text-muted)';
+          btnStart.style.display = 'none';
+          return;
+        }
+
+        if (data.status === 'running' && data.url) {
+          badge.textContent = '● Running';
+          badge.style.background = '#065f46';
+          badge.style.color = '#34d399';
+          btnStart.style.display = 'none';
+          btnStop.style.display = 'inline-block';
+          urlBox.style.display = 'block';
+          urlLink.href = data.url;
+          urlLink.textContent = data.url;
+          netLabel.textContent = 'Tunnel Active — accessible via Cloudflare HTTPS';
+          netLabel.style.color = 'var(--accent)';
+          // Stop frequent polling, switch to slow
+          if (tunnelPollTimer) { clearInterval(tunnelPollTimer); tunnelPollTimer = setInterval(updateTunnelUI, 10000); }
+        } else if (data.status === 'starting') {
+          badge.textContent = '● Starting...';
+          badge.style.background = '#78350f';
+          badge.style.color = '#fbbf24';
+          btnStart.disabled = true;
+          btnStart.textContent = '⏳ Starting...';
+        } else {
+          badge.textContent = '● Stopped';
+          badge.style.background = '#334155';
+          badge.style.color = 'var(--text-muted)';
+          btnStart.style.display = 'inline-block';
+          btnStart.disabled = false;
+          btnStart.textContent = '▶ Start Tunnel';
+          btnStop.style.display = 'none';
+          urlBox.style.display = 'none';
+          netLabel.textContent = 'Protected (Localhost only, no router ports opened)';
+          netLabel.style.color = 'var(--success)';
+          if (tunnelPollTimer) { clearInterval(tunnelPollTimer); tunnelPollTimer = null; }
+        }
+      } catch (e) {}
+    }
+
+    function pollTunnelStatus() {
+      updateTunnelUI();
+    }
+
+    function copyTunnelUrl() {
+      const link = document.getElementById('tunnelUrlLink');
+      if (link && link.textContent) {
+        navigator.clipboard.writeText(link.textContent).then(() => {
+          alert('Tunnel URL copied to clipboard!');
+        });
+      }
+    }
+
+    // Start on load
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>

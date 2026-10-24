@@ -1,0 +1,30 @@
+# Environment and secrets
+.env
+
+# Data storage (cameras, events, sqlite/json)
+data/
+data/*
+
+# Models and downloaded binaries
+models/
+models/*
+tools/
+tools/*
+downloads/
+downloads/*
+
+# Logs
+logs/
+*.log
+
+# Dependencies and virtual environments
+node_modules/
+venv/
+detector/venv/
+__pycache__/
+*.pyc
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+.DS_Store
