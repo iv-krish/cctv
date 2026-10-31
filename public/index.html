@@ -97,6 +97,12 @@
     .helper-success { background: #064e3b; border: 1px solid var(--success); color: #a7f3d0; }
     .helper-warning { background: #78350f; border: 1px solid var(--warning); color: #fde68a; }
     .helper-danger { background: #7f1d1d; border: 1px solid var(--danger); color: #fecaca; }
+
+    .cam-status-pill { font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+    .status-online { background: #064e3b; color: #34d399; border: 1px solid #059669; }
+    .status-offline { background: #7f1d1d; color: #f87171; border: 1px solid #dc2626; }
+    .status-unchecked { background: #334155; color: #94a3b8; border: 1px solid #475569; }
+    .diag-banner { padding: 6px 12px; font-size: 0.75rem; border-top: 1px solid var(--card-border); background: #111c2e; display: flex; justify-content: space-between; align-items: center; }
     
     /* Login Screen */
     #loginOverlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 200; }
@@ -483,20 +489,30 @@
         card.className = 'cam-card';
         // go2rtc stream URL (proxied through /go2rtc for local & remote Cloudflare access)
         const streamUrl = `/go2rtc/stream.html?src=${encodeURIComponent(cam.id)}&mode=webrtc,mse,mp4`;
+        const statusClass = cam.lastStatus === 'online' ? 'status-online' : (cam.lastStatus === 'offline' ? 'status-offline' : 'status-unchecked');
+        const statusText = cam.lastStatus === 'online' ? 'Online' : (cam.lastStatus === 'offline' ? 'Offline' : 'Unchecked');
+        const statusMsg = cam.lastStatusMessage || (cam.lastStatus === 'online' ? 'Verified working' : 'Connection not verified');
         
         card.innerHTML = `
           <div class="cam-header">
             <div class="cam-title">
-              <span class="status-dot"></span>
+              <span class="cam-status-pill ${statusClass}" id="badge-${cam.id}">${statusText}</span>
               <span>${escapeHtml(cam.name)}</span>
             </div>
             <div style="display: flex; gap: 6px; align-items: center;">
               <span class="cam-badge">Ch ${cam.channel}</span>
+              <button class="btn btn-secondary btn-sm" id="btn-diag-${cam.id}" onclick="diagnoseCamera('${cam.id}')">Test</button>
               <button class="btn btn-danger btn-sm" onclick="deleteCamera('${cam.id}')">Delete</button>
             </div>
           </div>
           <div class="cam-viewport">
-            <iframe src="${streamUrl}" allow="autoplay; fullscreen" loading="lazy"></iframe>
+            <iframe id="iframe-${cam.id}" src="${streamUrl}" allow="autoplay; fullscreen" loading="lazy"></iframe>
+          </div>
+          <div class="diag-banner" id="banner-${cam.id}">
+            <span style="color: ${cam.lastStatus === 'online' ? 'var(--success)' : (cam.lastStatus === 'offline' ? 'var(--danger)' : 'var(--text-muted)')}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%;">
+              ${escapeHtml(statusMsg)}
+            </span>
+            <span style="color: var(--text-muted); font-size: 0.7rem;">${cam.lastChecked ? new Date(cam.lastChecked).toLocaleTimeString() : ''}</span>
           </div>
           <div class="cam-footer">
             <span style="font-family: monospace;">${escapeHtml(cam.maskedUrl || '')}</span>
@@ -505,6 +521,54 @@
         `;
         grid.appendChild(card);
       });
+    }
+
+    async function diagnoseCamera(id) {
+      const btn = document.getElementById(`btn-diag-${id}`);
+      const badge = document.getElementById(`badge-${id}`);
+      const banner = document.getElementById(`banner-${id}`);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Testing...';
+      }
+      if (badge) {
+        badge.className = 'cam-status-pill status-unchecked';
+        badge.textContent = 'Testing...';
+      }
+
+      try {
+        const res = await fetch(`/api/cameras/${id}/diagnose`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.result) {
+          const isOnline = data.result.status === 'online';
+          if (badge) {
+            badge.className = `cam-status-pill ${isOnline ? 'status-online' : 'status-offline'}`;
+            badge.textContent = isOnline ? 'Online' : 'Offline';
+          }
+          if (banner) {
+            banner.innerHTML = `
+              <span style="color: ${isOnline ? 'var(--success)' : 'var(--danger)'};">
+                ${escapeHtml(data.result.message)}${data.result.suggestion ? ' — <em>' + escapeHtml(data.result.suggestion) + '</em>' : ''}
+              </span>
+              <span style="color: var(--text-muted); font-size: 0.7rem;">${new Date().toLocaleTimeString()}</span>
+            `;
+          }
+          // Reload iframe if verified working
+          if (isOnline) {
+            const iframe = document.getElementById(`iframe-${id}`);
+            if (iframe) iframe.src = iframe.src;
+          }
+        }
+      } catch (err) {
+        if (banner) {
+          banner.innerHTML = `<span style="color: var(--danger);">Diagnosis request failed: ${escapeHtml(err.message)}</span>`;
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Test';
+        }
+      }
     }
 
     async function deleteCamera(id) {

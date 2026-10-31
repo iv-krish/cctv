@@ -79,7 +79,11 @@ function saveEvents(evs) {
 // Helper: build RTSP URL with URL-encoded credentials
 function buildRtspUrl({ brand, ip, port, username, password, channel, subtype, customUrl }) {
   if (brand === 'advanced' && customUrl) {
-    return customUrl.trim();
+    let u = (customUrl || '').trim();
+    if (u.startsWith('rtsp://') && !u.includes('#')) {
+      u += '#transport=tcp';
+    }
+    return u;
   }
   const cleanIp = (ip || '').trim();
   const cleanPort = (port || 554).toString().trim();
@@ -93,18 +97,27 @@ function buildRtspUrl({ brand, ip, port, username, password, channel, subtype, c
     auth = `${cleanUser}:${cleanPass}@`;
   }
 
+  let finalUrl = '';
   switch (brand) {
     case 'cpplus':
     case 'dahua':
       // CP Plus & Dahua RTSP format
-      return `rtsp://${auth}${cleanIp}:${cleanPort}/cam/realmonitor?channel=${ch}&subtype=${sub}`;
+      finalUrl = `rtsp://${auth}${cleanIp}:${cleanPort}/cam/realmonitor?channel=${ch}&subtype=${sub}`;
+      break;
     case 'hikvision':
       // Hikvision format: /Streaming/Channels/<ch>0<sub+1>
-      return `rtsp://${auth}${cleanIp}:${cleanPort}/Streaming/Channels/${ch}0${sub + 1}`;
+      finalUrl = `rtsp://${auth}${cleanIp}:${cleanPort}/Streaming/Channels/${ch}0${sub + 1}`;
+      break;
     case 'generic':
     default:
-      return `rtsp://${auth}${cleanIp}:${cleanPort}/live/ch${ch}`;
+      finalUrl = `rtsp://${auth}${cleanIp}:${cleanPort}/live/ch${ch}`;
+      break;
   }
+
+  if (!finalUrl.includes('#')) {
+    finalUrl += '#transport=tcp';
+  }
+  return finalUrl;
 }
 
 function maskUrl(rawUrl) {
@@ -125,11 +138,158 @@ async function syncCamerasToGo2rtc() {
   }
 }
 
+// Comprehensive camera diagnosis helper
+async function testCameraDiagnostic({ ip, port, url, brand }) {
+  const cleanIp = (ip || '').trim();
+  const testPort = parseInt(port || 554, 10);
+
+  // Step 1: TCP Port Reachability Check
+  const tcpResult = await new Promise((resolve) => {
+    const s = new net.Socket();
+    s.setTimeout(1800);
+    s.on('connect', () => {
+      s.destroy();
+      resolve({ success: true });
+    });
+    s.on('timeout', () => {
+      s.destroy();
+      resolve({ success: false, reason: 'TIMEOUT' });
+    });
+    s.on('error', (err) => {
+      s.destroy();
+      resolve({ success: false, reason: err.code || err.message });
+    });
+    s.connect(testPort, cleanIp);
+  });
+
+  if (!tcpResult.success) {
+    if (tcpResult.reason === 'TIMEOUT' || tcpResult.reason === 'EHOSTUNREACH' || tcpResult.reason === 'ENETUNREACH') {
+      return {
+        status: 'offline',
+        code: 'HOST_UNREACHABLE',
+        message: `Host unreachable (${cleanIp}:${testPort})`,
+        suggestion: `Check DVR power and cabling. Verify your PC is on the same subnet as the DVR.`
+      };
+    }
+    if (tcpResult.reason === 'ECONNREFUSED') {
+      return {
+        status: 'offline',
+        code: 'PORT_CLOSED',
+        message: `Port ${testPort} closed on ${cleanIp}`,
+        suggestion: `RTSP port is not open on DVR. Open DVR Menu -> Network -> Port to enable RTSP.`
+      };
+    }
+    return {
+      status: 'offline',
+      code: 'TCP_ERROR',
+      message: `TCP Connection failed: ${tcpResult.reason}`,
+      suggestion: `Check network cabling, firewall, or DVR IP settings.`
+    };
+  }
+
+  // Step 2: RTSP handshake and authentication via go2rtc probe
+  const testStreamName = `probe_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  try {
+    const patchUrl = `${GO2RTC_API}/api/streams?name=${encodeURIComponent(testStreamName)}&src=${encodeURIComponent(url)}`;
+    const patchRes = await fetch(patchUrl, { method: 'PATCH' });
+    if (!patchRes.ok) {
+      return {
+        status: 'offline',
+        code: 'GO2RTC_ERROR',
+        message: 'go2rtc media engine rejected stream registration',
+        suggestion: 'Make sure go2rtc service is active.'
+      };
+    }
+
+    try {
+      const ctrl = new AbortController();
+      const tId = setTimeout(() => ctrl.abort(), 3500);
+      await fetch(`${GO2RTC_API}/api/frame.jpeg?src=${encodeURIComponent(testStreamName)}`, { signal: ctrl.signal });
+      clearTimeout(tId);
+    } catch(e) {}
+
+    const streamsRes = await fetch(`${GO2RTC_API}/api/streams`);
+    const streamsData = await streamsRes.json();
+    const probe = streamsData[testStreamName];
+
+    try {
+      await fetch(`${GO2RTC_API}/api/streams?name=${encodeURIComponent(testStreamName)}`, { method: 'DELETE' });
+    } catch(e) {}
+
+    if (probe && probe.producers && probe.producers.length > 0) {
+      const prod = probe.producers[0];
+      if (prod.error) {
+        const err = prod.error.toLowerCase();
+        if (err.includes('401') || err.includes('unauthorized') || err.includes('auth')) {
+          return {
+            status: 'offline',
+            code: 'AUTH_FAILED',
+            message: 'Authentication failed (401 Unauthorized)',
+            suggestion: 'Check the camera/DVR username and password in DVR user settings.'
+          };
+        }
+        if (err.includes('404') || err.includes('not found') || err.includes('stream not found')) {
+          return {
+            status: 'offline',
+            code: 'STREAM_NOT_FOUND',
+            message: 'Stream path or channel not found (404)',
+            suggestion: 'Verify the channel number and light stream subtype.'
+          };
+        }
+        return {
+          status: 'offline',
+          code: 'PROBE_FAILED',
+          message: `RTSP response: ${prod.error}`,
+          suggestion: 'Check camera stream configuration and brand format.'
+        };
+      }
+    }
+
+    return {
+      status: 'online',
+      code: 'WORKING',
+      message: 'Connection verified! Stream is online and responding.',
+      suggestion: 'Stream is ready for live viewing.'
+    };
+  } catch(err) {
+    try {
+      await fetch(`${GO2RTC_API}/api/streams?name=${encodeURIComponent(testStreamName)}`, { method: 'DELETE' });
+    } catch(e) {}
+    return {
+      status: 'offline',
+      code: 'DIAGNOSTIC_EXCEPTION',
+      message: `Diagnostic check error: ${err.message}`,
+      suggestion: 'Check if go2rtc engine is responding.'
+    };
+  }
+}
+
 // 3. EXPRESS APP SETUP
 const app = express();
 
+const sessionMiddleware = session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+});
+app.use(sessionMiddleware);
+
+// Authentication Check Middleware
+function requireAuth(req, res, next) {
+  if (req.session && req.session.authenticated) {
+    return next();
+  }
+  return res.status(401).json({ error: 'Authentication required' });
+}
+
 // Proxy go2rtc media engine through /go2rtc for unified port and remote tunnel streaming
-app.use('/go2rtc', (req, res) => {
+// Protected by requireAuth for security (both local and remote)
+app.use('/go2rtc', requireAuth, (req, res) => {
   const options = {
     hostname: '127.0.0.1',
     port: 1984,
@@ -157,17 +317,6 @@ app.use('/go2rtc', (req, res) => {
 
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
-
-app.use(session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-  }
-}));
 
 // Serve static frontend
 app.use(express.static(path.join(__dirname, 'public')));
@@ -240,9 +389,44 @@ app.get('/api/cameras', requireAuth, (req, res) => {
     channel: cam.channel,
     subtype: cam.subtype,
     maskedUrl: maskUrl(cam.url),
-    createdAt: cam.createdAt
+    createdAt: cam.createdAt,
+    lastStatus: cam.lastStatus || 'unchecked',
+    lastChecked: cam.lastChecked || null,
+    lastStatusMessage: cam.lastStatusMessage || null
   }));
   res.json(sanitized);
+});
+
+// Diagnostics endpoint for a specific saved camera
+app.post('/api/cameras/:id/diagnose', requireAuth, async (req, res) => {
+  const cameras = loadCameras();
+  const cam = cameras.find(c => c.id === req.params.id);
+  if (!cam) return res.status(404).json({ error: 'Camera not found' });
+
+  const result = await testCameraDiagnostic(cam);
+  cam.lastStatus = result.status;
+  cam.lastChecked = new Date().toISOString();
+  cam.lastStatusMessage = result.message;
+  saveCameras(cameras);
+
+  // Sync to go2rtc
+  if (result.status === 'online') {
+    try {
+      const patchUrl = `${GO2RTC_API}/api/streams?name=${encodeURIComponent(cam.id)}&src=${encodeURIComponent(cam.url)}`;
+      await fetch(patchUrl, { method: 'PATCH' });
+    } catch(e) {}
+  }
+
+  res.json({
+    success: true,
+    result,
+    camera: {
+      id: cam.id,
+      lastStatus: cam.lastStatus,
+      lastChecked: cam.lastChecked,
+      lastStatusMessage: cam.lastStatusMessage
+    }
+  });
 });
 
 // Test camera connection helper
@@ -721,29 +905,41 @@ const server = app.listen(PORT, '127.0.0.1', async () => {
 // WebSocket proxy for go2rtc WebRTC and MSE signaling
 server.on('upgrade', (req, socket, head) => {
   if (req.url.startsWith('/go2rtc')) {
-    const targetPath = req.url.replace('/go2rtc', '') || '/';
-    const proxySocket = net.connect(1984, '127.0.0.1', () => {
-      proxySocket.write(`${req.method} ${targetPath} HTTP/${req.httpVersion}\r\n`);
-      for (let i = 0; i < req.rawHeaders.length; i += 2) {
-        const key = req.rawHeaders[i];
-        const val = req.rawHeaders[i + 1];
-        if (key.toLowerCase() === 'host') {
-          proxySocket.write(`Host: 127.0.0.1:1984\r\n`);
-        } else {
-          proxySocket.write(`${key}: ${val}\r\n`);
-        }
+    // Authenticate WebSocket upgrade using session middleware
+    sessionMiddleware(req, {}, () => {
+      if (!req.session || !req.session.authenticated) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
       }
-      proxySocket.write('\r\n');
-      if (head && head.length > 0) proxySocket.write(head);
-      socket.pipe(proxySocket);
-      proxySocket.pipe(socket);
-    });
 
-    proxySocket.on('error', () => {
-      socket.destroy();
-    });
-    socket.on('error', () => {
-      proxySocket.destroy();
+      const targetPath = req.url.replace('/go2rtc', '') || '/';
+      const proxySocket = net.connect(1984, '127.0.0.1', () => {
+        proxySocket.write(`${req.method} ${targetPath} HTTP/${req.httpVersion}\r\n`);
+        for (let i = 0; i < req.rawHeaders.length; i += 2) {
+          const key = req.rawHeaders[i];
+          const val = req.rawHeaders[i + 1];
+          if (key.toLowerCase() === 'host') {
+            proxySocket.write(`Host: 127.0.0.1:1984\r\n`);
+          } else if (key.toLowerCase() === 'origin') {
+            // Rewrite origin so go2rtc internal Upgrader.CheckOrigin always accepts proxied WebSockets
+            proxySocket.write(`Origin: http://127.0.0.1:1984\r\n`);
+          } else {
+            proxySocket.write(`${key}: ${val}\r\n`);
+          }
+        }
+        proxySocket.write('\r\n');
+        if (head && head.length > 0) proxySocket.write(head);
+        socket.pipe(proxySocket);
+        proxySocket.pipe(socket);
+      });
+
+      proxySocket.on('error', () => {
+        socket.destroy();
+      });
+      socket.on('error', () => {
+        proxySocket.destroy();
+      });
     });
   }
 });
